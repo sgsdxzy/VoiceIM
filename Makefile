@@ -1,9 +1,9 @@
-All : googlevoice
+All : googlespeech
 
-googlevoice : googlevoice.o upload.o
+googlespeech : googlespeech.o upload.o
 	cc -o $@ $+ -lcurl
 
-googlevoice.o : googlevoice.c
+googlespeech.o : googlespeech.c
 	cc -c $+
 
 upload.o : upload.c
@@ -11,4 +11,4 @@ upload.o : upload.c
 
 .PHONY : clean
 clean :
-	rm googlevoice.o upload.o
+	rm googlespeech.o upload.o
