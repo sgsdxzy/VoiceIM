@@ -7,7 +7,8 @@
 #include <sys/soundcard.h> 
 #include <errno.h>
 /* * Mandatory variables. */ 
-#define BUF_SIZE 160000 
+#define BUF_SIZE 960000 /* up to 1 min */ 
+#define FRAME_SIZE 4000 /* 1/4 second */
 #define CHANNELS 1 /*mono seems enough*/
 #define SPEED 8000
 
@@ -89,6 +90,13 @@ static void wav_init_header(WAVEHDR *fileheader)
     fileheader->chkData.dwSize  = cpu_to_le32(0); /* data length */
 }
 
+int kbhit()
+{
+    int n;
+    ioctl(0, FIONREAD, &n);
+    return n;
+}
+
 extern int upload(void* ptr, size_t len);
 
 int main()
@@ -96,7 +104,9 @@ int main()
     int audio_fd;
     void* buffer;
     void* audio_buffer;
-    int len;
+    void* buffer_point;
+    int len, i, j, final_size;
+    int ctl = 0;
     int format = AFMT_S16_LE; 
     int channels = CHANNELS; 
     int speed = SPEED; 
@@ -107,6 +117,7 @@ int main()
     WAVEHDR* wavheader = (WAVEHDR*)buffer;
     wav_init_header(wavheader);
     audio_buffer = buffer + sizeof(WAVEHDR);
+    buffer_point = audio_buffer;
 
     /* Open device */
     if ((audio_fd = open("/dev/dsp", O_RDONLY, 0)) == -1) 
@@ -126,7 +137,8 @@ int main()
     if (format != AFMT_S16_LE) 
     { 
         /* format not supported. */
-        //TODO
+       fprintf(stderr , "%s\n", "S16LE format is not supported by your device, exiting.");
+       exit(1);
     }
     if (ioctl(audio_fd, SNDCTL_DSP_CHANNELS, &channels) == -1) 
     { 
@@ -137,7 +149,8 @@ int main()
     if (channels != CHANNELS )
     {
         /* channel number not supported */
-        //TODO
+        fprintf(stderr , "%s\n", "Mono is not supported by your device, exiting.");
+        exit(1);
     }
     if (ioctl(audio_fd, SNDCTL_DSP_SPEED, &speed)==-1) 
     { 
@@ -148,22 +161,50 @@ int main()
     if (speed != SPEED) 
     {  
         /* speed not supported */ 
-        //TODO
+        fprintf(stderr , "%s\n", "8000Hz sample rate is not supported by your device, exiting.");
+        exit(1);
     }
 
     /* Record */
-    if ((len = read(audio_fd, audio_buffer, BUF_SIZE)) == -1) 
-    { 
-        perror("audio read"); 
-        exit(1); 
+    for (i = 0; i < 240; i++)
+    {    
+        if ((len = read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
+        { 
+            perror("audio read"); 
+            exit(1); 
+        }
+        buffer_point += FRAME_SIZE;
+        ctl = kbhit();
+        if (ctl > 0)
+        {
+            printf("%s\n","Key pressed");
+            for (j=0; j < ctl; j++)
+            {
+                getchar();
+            }
+            break;
+        }
+    }
+    if (i == 240)
+    {
+        printf("%s\n", "Time up!");
+        final_size = BUF_SIZE;
+    }
+    else
+    {
+        final_size = (i + 1) * FRAME_SIZE;
     }
 
-    unsigned long temp = BUF_SIZE + sizeof(WAVEHDR) - sizeof(CHUNKHDR);
+    /* Finalize header */
+    unsigned long temp = final_size + sizeof(WAVEHDR) - sizeof(CHUNKHDR);
     wavheader->chkRiff.dwSize = cpu_to_le32(temp);
-    wavheader->chkData.dwSize = cpu_to_le32(BUF_SIZE);
+    wavheader->chkData.dwSize = cpu_to_le32(final_size);
 
     /* upload it */
-    upload(buffer, (size_t)buffersize);
+    upload(buffer, (size_t)(final_size + sizeof(WAVEHDR)));
+
+    /* Exiting */
+    free(buffer);
 
     return 0;
 }
