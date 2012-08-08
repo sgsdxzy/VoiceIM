@@ -1,11 +1,14 @@
-All : record upload
+All : googlevoice
 
-record : record.c
-	cc -o record $+ -lasound
+googlevoice : googlevoice.o upload.o
+	cc -o $@ $+ -lcurl
 
-upload : upload.c
-	cc -o upload $+ -lcurl
+googlevoice.o : googlevoice.c
+	cc -c $+
+
+upload.o : upload.c
+	cc -c $+
 
 .PHONY : clean
 clean :
-	rm record upload
+	rm googlevoice.o upload.o
