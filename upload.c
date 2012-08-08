@@ -7,7 +7,7 @@ int upload(void* ptr, size_t len)
     curl_global_init(CURL_GLOBAL_ALL);
     CURL* handle = curl_easy_init();
 
-    curl_easy_setopt(handle, CURLOPT_URL, "http://www.google.com/speech-api/v1/recognize?xjerr=1&client=chromium&lang=zh-CN&maxresults=5");
+    curl_easy_setopt(handle, CURLOPT_URL, "http://www.google.com/speech-api/v1/recognize?xjerr=1&client=chromium&lang=zh-CN&maxresults=8");
 
     struct curl_slist *headers=NULL;
     headers = curl_slist_append(headers, "Content-Type: audio/L16; rate=8000");
