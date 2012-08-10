@@ -6,74 +6,23 @@
 #include <stdlib.h>
 #include <sys/soundcard.h> 
 #include <errno.h>
+#include <pthread.h>
+#include <string.h>
+#include "commontypes.h"
 /* * Mandatory variables. */ 
 #define BUF_SIZE 960000 /* up to 1 min */ 
 #define FRAME_SIZE 4000 /* 1/4 second */
 #define CHANNELS 1 /*mono seems enough*/
 #define SPEED 8000
 
-/* this buffer holds the digitized audio */
-//unsigned char buf[LENGTH*RATE*SIZE*CHANNELS/8];
-typedef unsigned char   BYTE;
-typedef unsigned short  WORD;
-typedef unsigned int  DWORD;
-typedef unsigned int  FOURCC;    /* a four character code */
-
-/* flags for 'wFormatTag' field of WAVEFORMAT */
-#define WAVE_FORMAT_PCM 1
-
-/* MMIO macros */
-#define mmioFOURCC(ch0, ch1, ch2, ch3) \
-  ((DWORD)(BYTE)(ch0) | ((DWORD)(BYTE)(ch1) << 8) | \
-  ((DWORD)(BYTE)(ch2) << 16) | ((DWORD)(BYTE)(ch3) << 24))
-
-#define FOURCC_RIFF    mmioFOURCC ('R', 'I', 'F', 'F')
-#define FOURCC_LIST    mmioFOURCC ('L', 'I', 'S', 'T')
-#define FOURCC_WAVE    mmioFOURCC ('W', 'A', 'V', 'E')
-#define FOURCC_FMT    mmioFOURCC ('f', 'm', 't', ' ')
-#define FOURCC_DATA    mmioFOURCC ('d', 'a', 't', 'a')
-
-typedef struct CHUNKHDR {
-    FOURCC ckid;        /* chunk ID */
-    DWORD dwSize;             /* chunk size */
-} CHUNKHDR;
-
-/* simplified Header for standard WAV files */
-typedef struct WAVEHDR {
-    CHUNKHDR chkRiff;
-    FOURCC fccWave;
-    CHUNKHDR chkFmt;
-    WORD wFormatTag;       /* format type */
-    WORD nChannels;       /* number of channels (i.e. mono, stereo, etc.) */
-    DWORD nSamplesPerSec;  /* sample rate */
-    DWORD nAvgBytesPerSec; /* for buffer estimation */
-    WORD nBlockAlign;       /* block size of data */
-    WORD wBitsPerSample;
-    CHUNKHDR chkData;
-} WAVEHDR;
-
-#if BYTE_ORDER == BIG_ENDIAN
-# define cpu_to_le32(x) SWAP4((x))
-# define cpu_to_le16(x) SWAP2((x))
-# define le32_to_cpu(x) SWAP4((x))
-# define le16_to_cpu(x) SWAP2((x))
-#else
-# define cpu_to_le32(x) (x)
-# define cpu_to_le16(x) (x)
-# define le32_to_cpu(x) (x)
-# define le16_to_cpu(x) (x)
-#endif
-
-static void wav_init_header(WAVEHDR *fileheader)
+static void wav_finalize_header(WAVEHDR *fileheader, int wav_size)
 {
-    /* stolen from cdda2wav */
     int nBitsPerSample = 16;
     int channels       = CHANNELS;
     int rate           = SPEED;
-
+    unsigned long temp = wav_size + sizeof(WAVEHDR) - sizeof(CHUNKHDR);
     unsigned long nBlockAlign = channels * ((nBitsPerSample + 7) / 8);
     unsigned long nAvgBytesPerSec = nBlockAlign * rate;
-    unsigned long temp = 0 + sizeof(WAVEHDR) - sizeof(CHUNKHDR); /* data length */ 
 
     fileheader->chkRiff.ckid    = cpu_to_le32(FOURCC_RIFF);
     fileheader->fccWave         = cpu_to_le32(FOURCC_WAVE);
@@ -87,38 +36,12 @@ static void wav_init_header(WAVEHDR *fileheader)
     fileheader->wBitsPerSample  = cpu_to_le16(nBitsPerSample);
     fileheader->chkData.ckid    = cpu_to_le32(FOURCC_DATA);
     fileheader->chkRiff.dwSize  = cpu_to_le32(temp);
-    fileheader->chkData.dwSize  = cpu_to_le32(0); /* data length */
+    fileheader->chkData.dwSize  = cpu_to_le32(wav_size);
 }
 
-int kbhit()
-{
-    int n;
-    ioctl(0, FIONREAD, &n);
-    return n;
-}
-
-extern int upload(void* ptr, size_t len);
-
-int main()
+static int intdevice(int format, int channels, int speed)
 {
     int audio_fd;
-    void* buffer;
-    void* audio_buffer;
-    void* buffer_point;
-    int len, i, j, final_size;
-    int ctl = 0;
-    int format = AFMT_S16_LE; 
-    int channels = CHANNELS; 
-    int speed = SPEED; 
-    int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
-    buffer = malloc(buffersize);
-
-    /* Init header */
-    WAVEHDR* wavheader = (WAVEHDR*)buffer;
-    wav_init_header(wavheader);
-    audio_buffer = buffer + sizeof(WAVEHDR);
-    buffer_point = audio_buffer;
-
     /* Open device */
     if ((audio_fd = open("/dev/dsp", O_RDONLY, 0)) == -1) 
     { 
@@ -165,46 +88,145 @@ int main()
         exit(1);
     }
 
-    /* Record */
-    for (i = 0; i < 240; i++)
-    {    
-        if ((len = read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
-        { 
-            perror("audio read"); 
-            exit(1); 
-        }
-        buffer_point += FRAME_SIZE;
-        ctl = kbhit();
-        if (ctl > 0)
+    return audio_fd;
+}
+
+static int kbhit()
+{
+    int n;
+    ioctl(0, FIONREAD, &n);
+    return n;
+}
+
+static short shortabs(short i)
+{
+    return i>=0 ? i : -i;
+}
+
+static int maxwav(void* buffer_point)
+{
+    int max;
+    short* point = buffer_point;
+    short abs;
+    int i = FRAME_SIZE / 2;
+    int j;
+    max = shortabs(point[0]);
+    for (j=1;i<i;j++)
+    {
+        abs = shortabs(point[j]);
+        if (max < abs)
         {
-            printf("%s\n","Key pressed");
-            for (j=0; j < ctl; j++)
-            {
-                getchar();
-            }
-            break;
+            max = abs;
         }
     }
-    if (i == 240)
+    return max;
+}
+
+extern void* upload(void* arg);
+
+int main()
+{
+    int audio_fd;
+    void* buffer;
+    void* audio_buffer;
+    void* buffer_point;
+    WAVPROP* wavp;
+    WAVEHDR* wavheader;
+    pthread_t tid;
+    int len, i, j, final_size, err, counter;
+    int ctl = 0;
+    int threshold = 9000; /* Threshold of wave strength to be considered speaking */
+    int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
+
+    audio_fd = intdevice(AFMT_S16_LE, CHANNELS, SPEED);
+
+
+    while (1)
     {
-        printf("%s\n", "Time up!");
-        final_size = BUF_SIZE;
+        buffer = malloc(buffersize);
+        audio_buffer = buffer + sizeof(WAVEHDR);
+        buffer_point = audio_buffer;
+
+        /* Wait until speek */
+        counter = 0; /* n/4 secs of silence */
+        while(1)
+        {
+            if ((len = read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
+            { 
+                perror("audio read"); 
+                exit(1); 
+            }
+            printf("%d\n", maxwav(buffer_point));
+            if (maxwav(buffer_point) > threshold)
+            {
+                printf("%s\n", "Starting record");
+                buffer_point += FRAME_SIZE;
+                break;
+            }
+        }
+
+
+
+        /* Record */
+        for (i = 0; i < 239; i++)
+        {    
+            if ((len = read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
+            { 
+                perror("audio read"); 
+                exit(1); 
+            }
+            if (maxwav(buffer_point) < threshold)
+            {
+                counter += 1;
+            }
+            else
+            {
+                counter = 0;
+            }
+            if (counter > 11) /* 3 secs */
+            {
+                printf("%s\n", "Stop recording");
+                i -= 12;
+                break;
+            }
+            buffer_point += FRAME_SIZE;
+            ctl = kbhit();
+            if (ctl > 0)
+            {
+                printf("%s\n", "Key pressed");
+                for (j=0; j < ctl; j++)
+                {
+                    getchar();
+                }
+                break;
+            }
+        }
+        if (i == 239)
+        {
+            printf("%s\n", "Time up!");
+            final_size = BUF_SIZE;
+        }
+        else
+        {
+            final_size = (i + 1) * FRAME_SIZE;
+        }
+
+        /* Finalize header */
+        wavheader = (WAVEHDR*)buffer;
+        wav_finalize_header(wavheader, final_size);
+
+        /* upload it */
+        wavp = (WAVPROP*)malloc(sizeof(WAVPROP));
+        wavp->ptr = buffer;
+        wavp->len = (size_t)(final_size + sizeof(WAVEHDR));
+        err = pthread_create(&tid, NULL, upload, (void*)wavp);
+        if (err != 0) {
+		fprintf(stderr, "can't create thread: %s\n", strerror(err));
+		exit(1);
+	}
+
     }
-    else
-    {
-        final_size = (i + 1) * FRAME_SIZE;
-    }
 
-    /* Finalize header */
-    unsigned long temp = final_size + sizeof(WAVEHDR) - sizeof(CHUNKHDR);
-    wavheader->chkRiff.dwSize = cpu_to_le32(temp);
-    wavheader->chkData.dwSize = cpu_to_le32(final_size);
-
-    /* upload it */
-    upload(buffer, (size_t)(final_size + sizeof(WAVEHDR)));
-
-    /* Exiting */
-    free(buffer);
 
     return 0;
 }

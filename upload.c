@@ -1,9 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <curl/curl.h>
+#include "commontypes.h"
 
-int upload(void* ptr, size_t len)
+void* upload(void* arg)
 {
+    WAVPROP* wavp = arg;
+
     curl_global_init(CURL_GLOBAL_ALL);
     CURL* handle = curl_easy_init();
 
@@ -15,14 +18,16 @@ int upload(void* ptr, size_t len)
 
     curl_easy_setopt(handle, CURLOPT_USERAGENT, "Mozilla/5.0");
 
-    curl_easy_setopt(handle, CURLOPT_POSTFIELDS, ptr);
-    curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE, len);
+    curl_easy_setopt(handle, CURLOPT_POSTFIELDS, wavp->ptr);
+    curl_easy_setopt(handle, CURLOPT_POSTFIELDSIZE, wavp->len);
 
     curl_easy_perform(handle); /* post away! */
 
     curl_slist_free_all(headers); /* free the header list */
 
     curl_global_cleanup();
+    free(wavp->ptr);
+    free(wavp);
 
-    return 0;
+    return NULL;
 }
