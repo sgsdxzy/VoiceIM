@@ -40,58 +40,6 @@ static void wav_finalize_header(WAVEHDR *fileheader, int wav_size)
     fileheader->chkData.dwSize  = cpu_to_le32(wav_size);
 }
 
-static int intdevice(int format, int channels, int speed)
-{
-    int audio_fd;
-    /* Open device */
-    if ((audio_fd = open("/dev/dsp", O_RDONLY, 0)) == -1) 
-    { 
-        /* Open of device failed */ 
-        perror("/dev/dsp"); 
-        exit(1); 
-    } 
-
-    /* Set format */
-    if (ioctl(audio_fd, SNDCTL_DSP_SETFMT, &format) == -1) 
-    { 
-        /* fatal error */ 
-        perror("SNDCTL_DSP_SETFMT"); 
-        exit(1); 
-    } 
-    if (format != AFMT_S16_LE) 
-    { 
-        /* format not supported. */
-       fprintf(stderr , "%s\n", "S16LE format is not supported by your device, exiting.");
-       exit(1);
-    }
-    if (ioctl(audio_fd, SNDCTL_DSP_CHANNELS, &channels) == -1) 
-    { 
-        /* Fatal error */ 
-        perror("SNDCTL_DSP_CHANNELS"); 
-        exit(1); 
-    }
-    if (channels != CHANNELS )
-    {
-        /* channel number not supported */
-        fprintf(stderr , "%s\n", "Mono is not supported by your device, exiting.");
-        exit(1);
-    }
-    if (ioctl(audio_fd, SNDCTL_DSP_SPEED, &speed)==-1) 
-    { 
-        /* Fatal error */ 
-        perror("SNDCTL_DSP_SPEED"); 
-        exit(1); 
-    } 
-    if (speed != SPEED) 
-    {  
-        /* speed not supported */ 
-        fprintf(stderr , "%s\n", "8000Hz sample rate is not supported by your device, exiting.");
-        exit(1);
-    }
-
-    return audio_fd;
-}
-
 static int kbhit()
 {
     int n;
@@ -124,6 +72,7 @@ static int maxwav(void* buffer_point)
 }
 
 extern void* upload(void* arg);
+extern int record_init(int format, int channels, int speed);
 
 int main()
 {
@@ -139,7 +88,7 @@ int main()
     int threshold = 10000; /* Threshold of wave strength to be considered speaking */
     int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
 
-    audio_fd = intdevice(AFMT_S16_LE, CHANNELS, SPEED);
+    audio_fd = record_init(AFMT_S16_LE, CHANNELS, SPEED);
     struct curl_slist *headers = NULL;
     upload_init(headers);
 
@@ -186,10 +135,10 @@ int main()
             {
                 counter = 0;
             }
-            if (counter > 7) /* 3 secs */
+            if (counter > 3) /* 1 secs */
             {
                 printf("%s\n", "Stop recording");
-                i -= 8;
+                i -= 4;
                 break;
             }
             buffer_point += FRAME_SIZE;
@@ -230,6 +179,7 @@ int main()
 
     }
 
+    record_clean(audio_fd);
     upload_clean(headers);
 
     return 0;
