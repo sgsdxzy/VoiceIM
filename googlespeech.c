@@ -158,7 +158,7 @@ int main()
                 perror("audio read"); 
                 exit(1); 
             }
-            printf("%d\n", maxwav(buffer_point));
+            //printf("%d\n", maxwav(buffer_point));
             if (maxwav(buffer_point) > threshold)
             {
                 printf("%s\n", "Starting record");
