@@ -136,7 +136,7 @@ int main()
     pthread_t tid;
     int len, i, j, final_size, err, counter;
     int ctl = 0;
-    int threshold = 8000; /* Threshold of wave strength to be considered speaking */
+    int threshold = 10000; /* Threshold of wave strength to be considered speaking */
     int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
 
     audio_fd = intdevice(AFMT_S16_LE, CHANNELS, SPEED);
@@ -150,7 +150,7 @@ int main()
         buffer_point = audio_buffer;
 
         /* Wait until speek */
-        counter = 0; /* n/4 secs of silence */
+        counter = 0; 
         while(1)
         {
             if ((read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
@@ -161,7 +161,7 @@ int main()
             //printf("%d\n", maxwav(buffer_point));
             if (maxwav(buffer_point) > threshold)
             {
-                printf("%s\n", "Starting record");
+                printf("%s\n", "Start recording");
                 buffer_point += FRAME_SIZE;
                 break;
             }
