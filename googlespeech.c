@@ -134,7 +134,7 @@ int main()
     WAVPROP* wavp;
     WAVEHDR* wavheader;
     pthread_t tid;
-    int len, i, j, final_size, err, counter;
+    int i, j, final_size, err, counter;
     int ctl = 0;
     int threshold = 10000; /* Threshold of wave strength to be considered speaking */
     int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
