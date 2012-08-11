@@ -6,14 +6,15 @@
 #include <stdlib.h>
 #include <sys/soundcard.h> 
 #include <errno.h>
-#include <pthread.h>
-#include <string.h>
 #include "commontypes.h"
 /* * Mandatory variables. */ 
 #define BUF_SIZE 960000 /* up to 1 min */ 
 #define FRAME_SIZE 4000 /* 1/4 second */
 #define CHANNELS 1 /*mono seems enough*/
 #define SPEED 8000
+
+pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+CURL* handle;
 
 static void wav_finalize_header(WAVEHDR *fileheader, int wav_size)
 {
@@ -135,11 +136,12 @@ int main()
     pthread_t tid;
     int len, i, j, final_size, err, counter;
     int ctl = 0;
-    int threshold = 9000; /* Threshold of wave strength to be considered speaking */
+    int threshold = 10000; /* Threshold of wave strength to be considered speaking */
     int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
 
     audio_fd = intdevice(AFMT_S16_LE, CHANNELS, SPEED);
-
+    struct curl_slist *headers = NULL;
+    upload_init(headers);
 
     while (1)
     {
@@ -227,6 +229,7 @@ int main()
 
     }
 
+    upload_clean(headers);
 
     return 0;
 }
