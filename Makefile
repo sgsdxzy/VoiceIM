@@ -1,7 +1,7 @@
 All : googlespeech
 
 googlespeech : googlespeech.o upload.o
-	cc -o $@ $+ -lcurl -lpthread
+	cc -o $@ $+ -lcurl -lpthread -Wall
 
 googlespeech.o : googlespeech.c
 	cc -c $+

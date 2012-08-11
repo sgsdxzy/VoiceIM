@@ -112,7 +112,7 @@ static int maxwav(void* buffer_point)
     int i = FRAME_SIZE / 2;
     int j;
     max = shortabs(point[0]);
-    for (j=1;i<i;j++)
+    for (j=1;j<i;j++)
     {
         abs = shortabs(point[j]);
         if (max < abs)
@@ -136,7 +136,7 @@ int main()
     pthread_t tid;
     int len, i, j, final_size, err, counter;
     int ctl = 0;
-    int threshold = 10000; /* Threshold of wave strength to be considered speaking */
+    int threshold = 8000; /* Threshold of wave strength to be considered speaking */
     int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
 
     audio_fd = intdevice(AFMT_S16_LE, CHANNELS, SPEED);
@@ -153,7 +153,7 @@ int main()
         counter = 0; /* n/4 secs of silence */
         while(1)
         {
-            if ((len = read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
+            if ((read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
             { 
                 perror("audio read"); 
                 exit(1); 
@@ -172,11 +172,12 @@ int main()
         /* Record */
         for (i = 0; i < 239; i++)
         {    
-            if ((len = read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
+            if ((read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
             { 
                 perror("audio read"); 
                 exit(1); 
             }
+            //printf("%d\n", maxwav(buffer_point));
             if (maxwav(buffer_point) < threshold)
             {
                 counter += 1;
@@ -185,10 +186,10 @@ int main()
             {
                 counter = 0;
             }
-            if (counter > 11) /* 3 secs */
+            if (counter > 7) /* 3 secs */
             {
                 printf("%s\n", "Stop recording");
-                i -= 12;
+                i -= 8;
                 break;
             }
             buffer_point += FRAME_SIZE;
