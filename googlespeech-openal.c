@@ -4,7 +4,6 @@
 #include <unistd.h> 
 #include <fcntl.h> 
 #include <stdlib.h>
-#include <sys/soundcard.h> 
 #include <errno.h>
 #include <AL/al.h>
 #include <AL/alc.h>
