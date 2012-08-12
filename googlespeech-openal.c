@@ -94,9 +94,11 @@ int main()
     int threshold = 10000; /* Threshold of wave strength to be considered speaking */
     int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
 
-    device = record_init(AL_FORMAT_MONO16, SPEED, FRAME_SIZE);
     struct curl_slist *headers = NULL;
     upload_init(headers);
+
+    device = record_init(AL_FORMAT_MONO16, SPEED, FRAME_SIZE * 2);
+    alcCaptureStart(device);
 
     while (1)
     {
@@ -104,14 +106,13 @@ int main()
         audio_buffer = buffer + sizeof(WAVEHDR);
         buffer_point = audio_buffer;
 
-        alcCaptureStart(device);
 
         /* Wait until speek */
         counter = 0; 
         while(1)
         {
-            alcGetIntegerv(device, ALC_CAPTURE_SAMPLES, (ALCsizei)sizeof(ALint), &sample);
-            alcCaptureSamples(device, (ALCvoid*)buffer_point, (ALCsizei)1); 
+            alcCaptureSamples(device, (ALCvoid*)buffer_point, (ALCsizei)2000); 
+            usleep((useconds_t)250000);
             //printf("%d\n", maxwav(buffer_point));
             if (maxwav(buffer_point) > threshold)
             {
@@ -126,8 +127,9 @@ int main()
         /* Record */
         for (i = 0; i < 239; i++)
         {    
-            alcCaptureSamples(device, (ALCvoid*)buffer_point, (ALCsizei)250); 
-            printf("%d\n", maxwav(buffer_point));
+            alcCaptureSamples(device, (ALCvoid*)buffer_point, (ALCsizei)2000); 
+            usleep((useconds_t)250000);
+            //printf("%d\n", maxwav(buffer_point));
             if (maxwav(buffer_point) < threshold)
             {
                 counter += 1;
@@ -139,7 +141,7 @@ int main()
             if (counter > 3) /* 1 secs */
             {
                 printf("%s\n", "Stop recording");
-                i -= 4;
+                i -= 2;
                 break;
             }
             buffer_point += FRAME_SIZE;
@@ -154,7 +156,6 @@ int main()
                 break;
             }
         }
-        alcCaptureStop(device);
 
         if (i == 239)
         {
@@ -182,6 +183,7 @@ int main()
 
     }
 
+    alcCaptureStop(device);
     record_clean(device);
     upload_clean(headers);
 
