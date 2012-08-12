@@ -6,8 +6,6 @@
 #include <stdlib.h>
 #include <sys/soundcard.h> 
 #include <errno.h>
-#include <AL/al.h>
-#include <AL/alc.h>
 #include "commontypes.h"
 /* * Mandatory variables. */ 
 #define BUF_SIZE 960000 /* up to 1 min */ 
@@ -76,13 +74,12 @@ static int maxwav(void* buffer_point)
 extern void upload_init(struct curl_slist *headers);
 extern void* upload(void* arg);
 extern void upload_clean(struct curl_slist *headers);
-extern ALCdevice* record_init(ALCenum format, int speed, int buffersize);
-extern void record_clean(ALCdevice* device);
+extern int record_init(int format, int channels, int speed);
+extern void record_clean(int audio_fd);
 
 int main()
 {
-    ALCdevice* device;
-    ALint sample;
+    int audio_fd;
     void* buffer;
     void* audio_buffer;
     void* buffer_point;
@@ -94,7 +91,7 @@ int main()
     int threshold = 10000; /* Threshold of wave strength to be considered speaking */
     int buffersize = sizeof(WAVEHDR) + BUF_SIZE;
 
-    device = record_init(AL_FORMAT_MONO16, SPEED, FRAME_SIZE);
+    audio_fd = record_init(AFMT_S16_LE, CHANNELS, SPEED);
     struct curl_slist *headers = NULL;
     upload_init(headers);
 
@@ -104,14 +101,15 @@ int main()
         audio_buffer = buffer + sizeof(WAVEHDR);
         buffer_point = audio_buffer;
 
-        alcCaptureStart(device);
-
         /* Wait until speek */
         counter = 0; 
         while(1)
         {
-            alcGetIntegerv(device, ALC_CAPTURE_SAMPLES, (ALCsizei)sizeof(ALint), &sample);
-            alcCaptureSamples(device, (ALCvoid*)buffer_point, (ALCsizei)1); 
+            if ((read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
+            { 
+                perror("audio read"); 
+                exit(1); 
+            }
             //printf("%d\n", maxwav(buffer_point));
             if (maxwav(buffer_point) > threshold)
             {
@@ -126,8 +124,12 @@ int main()
         /* Record */
         for (i = 0; i < 239; i++)
         {    
-            alcCaptureSamples(device, (ALCvoid*)buffer_point, (ALCsizei)250); 
-            printf("%d\n", maxwav(buffer_point));
+            if ((read(audio_fd, buffer_point, FRAME_SIZE)) == -1) 
+            { 
+                perror("audio read"); 
+                exit(1); 
+            }
+            //printf("%d\n", maxwav(buffer_point));
             if (maxwav(buffer_point) < threshold)
             {
                 counter += 1;
@@ -154,8 +156,6 @@ int main()
                 break;
             }
         }
-        alcCaptureStop(device);
-
         if (i == 239)
         {
             printf("%s\n", "Time up!");
@@ -182,7 +182,7 @@ int main()
 
     }
 
-    record_clean(device);
+    record_clean(audio_fd);
     upload_clean(headers);
 
     return 0;

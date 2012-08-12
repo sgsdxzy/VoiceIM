@@ -1,9 +1,9 @@
-All : googlespeech
+All : googlespeech-oss
 
-googlespeech : googlespeech.o upload.o record-oss.o
+googlespeech-oss : googlespeech-oss.o upload.o record-oss.o
 	cc -o $@ $+ -lcurl -lpthread -Wall
 
-googlespeech.o : googlespeech.c
+googlespeech-oss.o : googlespeech-oss.c
 	cc -c $+
 
 record-oss.o : record-oss.c
@@ -14,4 +14,4 @@ upload.o : upload.c
 
 .PHONY : clean
 clean :
-	rm googlespeech.o upload.o
+	-rm googlespeech.o upload.o record-oss.o
